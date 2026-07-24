@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plot_template"
+version = "0.1.0"
+description = "Matplotlib configuration templates matching LaTeX report/beamer layouts"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "matplotlib",
+    "scienceplots",
+]
+
+[tool.setuptools]
+py-modules = ["plot_template"]
