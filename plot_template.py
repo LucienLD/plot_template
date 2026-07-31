@@ -84,28 +84,50 @@ def _apply_font_rcparams(base_font_size, font_family):
         })
 
 
-def configure_report(width="full", aspect_ratio=1.6, bigger_font_by=0, textwidth_pt=None):
+def _grid_figure_height(fig_width, aspect_ratio, ncols, nrows):
+    """Figure height such that each *panel* has `aspect_ratio`, not the figure.
+
+    With a 1x2 grid, sizing the whole figure to 1.6 leaves each panel at 0.8 --
+    tall and narrow, and the panels drift apart because the layout engine has
+    height to give away. Dividing the width by ncols first keeps every panel the
+    shape the caller asked for, whatever the grid.
+    """
+    if ncols < 1 or nrows < 1:
+        raise ValueError(f"ncols/nrows must be >= 1, got {ncols}x{nrows}")
+    panel_width = fig_width / ncols
+    return (panel_width / aspect_ratio) * nrows
+
+
+def configure_report(width="full", aspect_ratio=1.6, bigger_font_by=0, textwidth_pt=None,
+                     ncols=1, nrows=1):
     """
     Configure Matplotlib to match \\documentclass[a4paper, 12pt]{report}.
 
     width: "full" (\\textwidth), "half" (two figures side by side, 0.48\\textwidth),
            or a float fraction of \\textwidth (e.g. 0.3 for a third).
-    aspect_ratio: fig_width / fig_height (default 1.6, close to the golden ratio).
+    aspect_ratio: width / height of a single panel (default 1.6, close to the
+           golden ratio). With ncols/nrows it stays the *panel* shape, so the
+           figure grows with the grid instead of squashing the panels into it.
+    ncols/nrows: the subplot grid the figure will hold, so a side-by-side pair
+           is sized as one -- pass the same numbers you give plt.subplots().
     textwidth_pt: override REPORT_TEXTWIDTH_PT if your margins differ.
     """
     textwidth_pt = textwidth_pt or REPORT_TEXTWIDTH_PT
     fraction = _resolve_width_fraction(width)
     fig_width = textwidth_pt * PT_TO_IN * fraction
-    fig_height = fig_width / aspect_ratio
+    fig_height = _grid_figure_height(fig_width, aspect_ratio, ncols, nrows)
 
     base_font_size = REPORT_BASE_FONT_SIZE + bigger_font_by
     _apply_font_rcparams(base_font_size, "serif")
     plt.rcParams.update({"figure.figsize": (fig_width, fig_height)})
-    print(f"Plot configured for report ({width}): {fig_width:.2f}\"x{fig_height:.2f}\" at {base_font_size}pt.")
+    grid = "" if (ncols, nrows) == (1, 1) else f" [{nrows}x{ncols} grid]"
+    print(f"Plot configured for report ({width}){grid}: "
+          f"{fig_width:.2f}\"x{fig_height:.2f}\" at {base_font_size}pt.")
 
 
 def configure_beamer(width="full", caption_spacer=0.72, aspect_ratio=None,
-                      bigger_font_by=0, textwidth_pt=None, textheight_pt=None):
+                      bigger_font_by=0, textwidth_pt=None, textheight_pt=None,
+                      ncols=1, nrows=1):
     """
     Configure Matplotlib to match \\documentclass[aspectratio=169]{beamer} (16:9).
 
@@ -117,6 +139,9 @@ def configure_beamer(width="full", caption_spacer=0.72, aspect_ratio=None,
     aspect_ratio: fig_width / fig_height; overrides caption_spacer-based height.
     textwidth_pt / textheight_pt: override the measured beamer constants if
                      you use a theme with different margins.
+    ncols/nrows: the subplot grid the figure will hold. Only meaningful together
+                     with aspect_ratio, which is then the shape of one panel; the
+                     caption_spacer height is a slide-fit and already absolute.
     """
     textwidth_pt = textwidth_pt or BEAMER_TEXTWIDTH_PT
     textheight_pt = textheight_pt or BEAMER_TEXTHEIGHT_PT
@@ -124,14 +149,22 @@ def configure_beamer(width="full", caption_spacer=0.72, aspect_ratio=None,
     fig_width = textwidth_pt * PT_TO_IN * fraction
 
     if aspect_ratio is not None:
-        fig_height = fig_width / aspect_ratio
+        fig_height = _grid_figure_height(fig_width, aspect_ratio, ncols, nrows)
+        # A slide has a hard height limit, unlike a report page.
+        max_height = textheight_pt * PT_TO_IN * caption_spacer
+        if fig_height > max_height:
+            print(f"  (capping height {fig_height:.2f}\" -> {max_height:.2f}\": "
+                  f"a {nrows}x{ncols} grid at aspect {aspect_ratio} does not fit the slide)")
+            fig_height = max_height
     else:
         fig_height = textheight_pt * PT_TO_IN * caption_spacer
 
     base_font_size = BEAMER_BASE_FONT_SIZE + bigger_font_by
     _apply_font_rcparams(base_font_size, "sans-serif")
     plt.rcParams.update({"figure.figsize": (fig_width, fig_height)})
-    print(f"Plot configured for beamer 16:9 ({width}): {fig_width:.2f}\"x{fig_height:.2f}\" at {base_font_size}pt.")
+    grid = "" if (ncols, nrows) == (1, 1) else f" [{nrows}x{ncols} grid]"
+    print(f"Plot configured for beamer 16:9 ({width}){grid}: "
+          f"{fig_width:.2f}\"x{fig_height:.2f}\" at {base_font_size}pt.")
 
 
 def backToDefaultMatplotlib():
